@@ -39,10 +39,14 @@ export default class MyPlugin extends Plugin {
 			new Notice("Could not determine the file path.");
 			return;
 		}
-		new Notice(`Exporting ${inputFile} to HTML`);
+		// new Notice(`Exporting ${inputFile} to HTML`);
 		let outputFile: string = this.replaceFileExtension(inputFile, "html");
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-		const { html, metadata } = await render(this, view, inputFile, format);
+		console.log(Object.keys(this.app.commands.commands));
+		
+		let sucsess: Boolean = this.app.commands.executeCommandById("obsidian-pandoc:pandoc-export-html")
+		console.log(sucsess);
+		
 	}
 
 	replaceFileExtension(file: string, ext: string): string {
