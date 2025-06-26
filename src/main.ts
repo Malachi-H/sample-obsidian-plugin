@@ -13,6 +13,9 @@ import {
 import "@total-typescript/ts-reset";
 import "@total-typescript/ts-reset/dom";
 import { MySettingManager } from "@/SettingManager";
+import { readFileSync } from "fs";
+import { shell } from "electron";
+import fs from "fs";
 
 export default class MyPlugin extends Plugin {
 	private eventRefs: EventRef[] = [];
@@ -25,28 +28,41 @@ export default class MyPlugin extends Plugin {
 					this.app.workspace.getActiveViewOfType(MarkdownView);
 				if (markdownView) {
 					if (!checking) {
-						this.startHTMLExport();
+						this.startHTMLExport().then((html_file) => {
+							if (html_file) this.renderFile(html_file);
+						});
 					}
 					return true;
 				}
 			},
 		});
 	}
+	async renderFile(html_file: string) {
+		await shell.openPath(html_file);
+	}
 
-	async startHTMLExport(): Promise<void> {
+	async startHTMLExport(): Promise<string> {
 		let inputFile = this.getCurrentFile();
 		if (!inputFile) {
 			new Notice("Could not determine the file path.");
-			return;
+			throw new Error("Could not determine the file path.");
 		}
-		// new Notice(`Exporting ${inputFile} to HTML`);
 		let outputFile: string = this.replaceFileExtension(inputFile, "html");
-        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-		console.log(Object.keys(this.app.commands.commands));
-		
-		let sucsess: Boolean = this.app.commands.executeCommandById("obsidian-pandoc:pandoc-export-html")
-		console.log(sucsess);
-		
+		let sucsess: Boolean = this.app.commands.executeCommandById(
+			"obsidian-pandoc:pandoc-export-html",
+		);
+		if (!sucsess) {
+			new Notice("EXPORT FAILED!!");
+			throw new Error("EXPORT FAILED!!");
+		}
+		console.log(outputFile);
+		if (!fs.existsSync(outputFile)) {
+			new Notice("FILE DOES NOT EXIST!: " + outputFile);
+			throw new Error("FILE DOES NOT EXIST!: " + outputFile);
+		}
+		const file = readFileSync(outputFile, "utf-8");
+		console.log(file);
+		return file;
 	}
 
 	replaceFileExtension(file: string, ext: string): string {
