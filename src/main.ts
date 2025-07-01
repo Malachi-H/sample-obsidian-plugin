@@ -43,6 +43,14 @@ export default class MyPlugin extends Plugin {
 		}
 		let outputFile: string = this.replaceFileExtension(inputFile, "html");
 
+		let exists = await this.app.vault.adapter.exists(
+			normalizePath(outputFile),
+		);
+		if (exists) {
+			new Notice("NOTE: Overwriting Existing HTML file");
+			await this.app.vault.adapter.remove(normalizePath(outputFile));
+		}
+
 		this.app.commands.executeCommandById(
 			"obsidian-pandoc:pandoc-export-html",
 		);
@@ -67,14 +75,6 @@ export default class MyPlugin extends Plugin {
 				new Notice(err.message);
 			}
 			throw err;
-		}
-
-		const exists = await this.app.vault.adapter.exists(
-			normalizePath(outputFile),
-		);
-		if (!exists) {
-			new Notice("FILE DOES NOT EXIST!: " + outputFile);
-			throw new Error("FILE DOES NOT EXIST!: " + outputFile);
 		}
 
 		const file = await this.app.vault.adapter.read(
@@ -121,7 +121,7 @@ export default class MyPlugin extends Plugin {
 		} else {
 			await this.app.vault.create(filePath, content);
 		}
-		new Notice("HTML File Saved")
+		new Notice("HTML File Saved");
 	}
 
 	replaceFileExtension(file: string, ext: string): string {
