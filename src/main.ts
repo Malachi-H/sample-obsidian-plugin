@@ -9,12 +9,14 @@ import {
 	// PluginSettingTab,
 	// Setting,
 	FileSystemAdapter,
+	TFile,
 } from "obsidian";
 import "@total-typescript/ts-reset";
 import "@total-typescript/ts-reset/dom";
 // import { MySettingManager } from "@/SettingManager";
-import { readFileSync } from "fs";
-// import { shell } from "electron";
+import { readFileSync, writeFileSync, unlinkSync } from "fs";
+import { shell } from "electron";
+import * as path from "path";
 import fs from "fs";
 import html2pdf from "html2pdf.js";
 
@@ -30,7 +32,7 @@ export default class MyPlugin extends Plugin {
 				if (markdownView) {
 					if (!checking) {
 						this.MarkdownToHTML().then((html) => {
-							this.exportHtmlToPdf(html);
+							this.SaveFile(this.buildHTMLDocument(html));
 						});
 					}
 					return true;
@@ -40,7 +42,7 @@ export default class MyPlugin extends Plugin {
 	}
 
 	async MarkdownToHTML(): Promise<string> {
-		let inputFile = this.getCurrentFile();
+		let inputFile = this.getCurrentFilePath();
 		if (!inputFile) {
 			new Notice("Could not determine the file path.");
 			throw new Error("Could not determine the file path.");
@@ -78,72 +80,49 @@ export default class MyPlugin extends Plugin {
 			throw new Error("FILE DOES NOT EXIST!: " + outputFile);
 		}
 		const file = readFileSync(outputFile, "utf-8");
+		unlinkSync(outputFile);
 		return file;
 	}
 
-	async exportHtmlToPdf(html: string) {
-		const blob = new Blob([html], { type: "text/html" });
-		const url = URL.createObjectURL(blob);
+	buildHTMLDocument(html: string): String {
+		const customCss = `
+			body { background: white; color: black; font-family: sans-serif; }
+			h1 { font-size: 2em; }
+		`;
+		const customScript = `console.log('Custom script running!');`;
+		const parser = new DOMParser();
+		const doc = parser.parseFromString(html, "text/html");
+		const newHead = doc.createElement("head");
 
-		const iframe = document.createElement("iframe");
-		iframe.src = url;
-		document.body.appendChild(iframe);
+		const title = doc.createElement("title");
+		const style = doc.createElement("style");
+		const script = doc.createElement("script");
+		title.textContent = "Custom Page";
+		style.textContent = customCss;
+		script.textContent = customScript;
+		newHead.appendChild(title);
+		newHead.appendChild(style);
+		newHead.appendChild(script);
 
-		iframe.onload = () => {
-			try {
-				const doc = iframe.contentDocument!;
-				this.resetStyles(doc);
-				doc.body.style.backgroundColor = "red";
+		const oldHead = doc.querySelector("head");
+		if (oldHead && oldHead.parentNode) {
+			oldHead.parentNode.replaceChild(newHead, oldHead);
+		}
+		const newHtml = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
+		console.log(newHtml);
 
-				html2pdf()
-					.from(doc.body)
-					.set({
-						margin: 1,
-						image: { type: "jpeg", quality: 1 },
-						html2pdfcanvas: { scale: 3 },
-					})
-					.save("exported.pdf")
-					.then(() => {
-						iframe.remove();
-						URL.revokeObjectURL(url);
-						new Notice("PDF exported!");
-					})
-					.catch((err: any) => {
-						iframe.remove();
-						URL.revokeObjectURL(url);
-						new Notice("PDF export failed: " + err.message);
-						throw new Error("PDF EXPORT FAILED: " + err);
-					});
-			} catch (err) {
-				iframe.remove();
-				URL.revokeObjectURL(url);
-				new Notice("Unexpected error: " + (err as Error).message);
-				throw err;
-			}
-		};
-
-		document.body.appendChild(iframe);
+		return newHtml;
 	}
 
-	resetStyles(doc: Document) {
-		const allElements = doc.body.querySelectorAll("*");
-
-		// Reset all inline styles and computed styles to empty or defaults
-		allElements.forEach((el: HTMLElement) => {
-			// Clear inline style
-			el.style.cssText = "";
-
-			// Or, to override styles one-by-one, you could do:
-			// el.style.setProperty("all", "unset");
-			// el.style.setProperty("box-sizing", "border-box");
-		});
-
-		// Reset body styles explicitly
-		doc.body.style.all = "revert";
-		doc.body.style.background = "white";
-		doc.body.style.color = "black";
-		doc.body.style.fontFamily = "sans-serif";
-		doc.body.style.margin = "2rem";
+	async SaveFile(content: string): Promise<void> {
+		const filePath = `Daily Notes/${this.getCurrentFileName()}.html`;
+		const existingFile = this.app.vault.getAbstractFileByPath(filePath);
+		if (existingFile instanceof TFile) {
+			// existingAbstractFile is now typed as TFile
+			await this.app.vault.modify(existingFile, content);
+		} else {
+			await this.app.vault.create(filePath, content);
+		}
 	}
 
 	replaceFileExtension(file: string, ext: string): string {
@@ -152,13 +131,24 @@ export default class MyPlugin extends Plugin {
 		return file.slice(0, pos < 0 ? file.length : pos) + "." + ext;
 	}
 
-	getCurrentFile(): string | null {
+	getCurrentFilePath(): string | null {
 		const fileData = this.app.workspace.getActiveFile();
 		if (!fileData) return null;
 		const adapter = this.app.vault.adapter;
 		if (adapter instanceof FileSystemAdapter)
 			return adapter.getFullPath(fileData.path);
 		return null;
+	}
+
+	getCurrentFileName(): string {
+		let inputFile = this.getCurrentFilePath();
+		if (!inputFile) {
+			new Notice("Could not determine the file path.");
+			throw new Error("Could not determine the file path.");
+		}
+		const fileName: string = inputFile.split(/[/\\]/).pop() ?? "";
+		const dotIndex = fileName.lastIndexOf(".");
+		return dotIndex !== -1 ? fileName.substring(0, dotIndex) : fileName;
 	}
 
 	onunload() {
