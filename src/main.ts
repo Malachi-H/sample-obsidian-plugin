@@ -8,17 +8,18 @@ import {
 	Plugin,
 	// PluginSettingTab,
 	// Setting,
-	FileSystemAdapter,
+	// FileSystemAdapter,
 	TFile,
+	normalizePath,
 } from "obsidian";
 import "@total-typescript/ts-reset";
 import "@total-typescript/ts-reset/dom";
 // import { MySettingManager } from "@/SettingManager";
-import { readFileSync, writeFileSync, unlinkSync } from "fs";
-import { shell } from "electron";
-import * as path from "path";
-import fs from "fs";
-import html2pdf from "html2pdf.js";
+// import { readFileSync, writeFileSync, unlinkSync } from "fs";
+// import { shell } from "electron";
+// import * as path from "path";
+// import fs from "fs";
+// import html2pdf from "html2pdf.js";
 
 export default class MyPlugin extends Plugin {
 	private eventRefs: EventRef[] = [];
@@ -48,25 +49,23 @@ export default class MyPlugin extends Plugin {
 			throw new Error("Could not determine the file path.");
 		}
 		let outputFile: string = this.replaceFileExtension(inputFile, "html");
+		console.log(outputFile);
+		
 		this.app.commands.executeCommandById(
 			"obsidian-pandoc:pandoc-export-html",
 		);
-		const waitForFile = (
+		const waitForFile = async (
 			timeoutMs: number,
 			intervalMs: number,
-		): Promise<void> =>
-			new Promise((resolve, reject) => {
-				const startTime = Date.now();
-				const timer = setInterval(() => {
-					if (fs.existsSync(outputFile)) {
-						clearInterval(timer);
-						resolve();
-					} else if (Date.now() - startTime > timeoutMs) {
-						clearInterval(timer);
-						reject(new Error("Timed out waiting for HTML export"));
-					}
-				}, intervalMs);
-			});
+		): Promise<void> => {
+			const startTime = Date.now();
+			while (Date.now() - startTime < timeoutMs) {
+				const exists = await this.app.vault.adapter.exists(normalizePath(outputFile));
+				if (exists) return;
+				await new Promise((r) => setTimeout(r, intervalMs));
+			}
+			throw new Error("Timed out waiting for HTML export");
+		};
 		try {
 			await waitForFile(5000, 200);
 		} catch (err) {
@@ -75,16 +74,19 @@ export default class MyPlugin extends Plugin {
 			}
 			throw err;
 		}
-		if (!fs.existsSync(outputFile)) {
+
+		const exists = await this.app.vault.adapter.exists(normalizePath(outputFile));
+		if (!exists) {
 			new Notice("FILE DOES NOT EXIST!: " + outputFile);
 			throw new Error("FILE DOES NOT EXIST!: " + outputFile);
 		}
-		const file = readFileSync(outputFile, "utf-8");
-		unlinkSync(outputFile);
+
+		const file = await this.app.vault.adapter.read(normalizePath(outputFile));
+		await this.app.vault.adapter.remove(normalizePath(outputFile));
+
 		return file;
 	}
-
-	buildHTMLDocument(html: string): String {
+	buildHTMLDocument(html: string): string {
 		const customCss = `
 			body { background: white; color: black; font-family: sans-serif; }
 			h1 { font-size: 2em; }
@@ -134,10 +136,7 @@ export default class MyPlugin extends Plugin {
 	getCurrentFilePath(): string | null {
 		const fileData = this.app.workspace.getActiveFile();
 		if (!fileData) return null;
-		const adapter = this.app.vault.adapter;
-		if (adapter instanceof FileSystemAdapter)
-			return adapter.getFullPath(fileData.path);
-		return null;
+		return fileData.path;
 	}
 
 	getCurrentFileName(): string {
