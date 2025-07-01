@@ -30,6 +30,7 @@
     "yaml": "^2.8.0"
   },
   "dependencies": {
+    "html2pdf.js": "^0.10.3",
     "observable-slim": "^0.1.6",
     "zod": "^3.22.4"
   }
