@@ -1,25 +1,13 @@
 import {
-	// App,
-	// Editor,
 	EventRef,
 	MarkdownView,
-	// Modal,
 	Notice,
 	Plugin,
-	// PluginSettingTab,
-	// Setting,
-	// FileSystemAdapter,
 	TFile,
 	normalizePath,
 } from "obsidian";
 import "@total-typescript/ts-reset";
 import "@total-typescript/ts-reset/dom";
-// import { MySettingManager } from "@/SettingManager";
-// import { readFileSync, writeFileSync, unlinkSync } from "fs";
-// import { shell } from "electron";
-// import * as path from "path";
-// import fs from "fs";
-// import html2pdf from "html2pdf.js";
 
 export default class MyPlugin extends Plugin {
 	private eventRefs: EventRef[] = [];
@@ -32,14 +20,19 @@ export default class MyPlugin extends Plugin {
 					this.app.workspace.getActiveViewOfType(MarkdownView);
 				if (markdownView) {
 					if (!checking) {
-						this.MarkdownToHTML().then((html) => {
-							this.SaveFile(this.buildHTMLDocument(html));
-						});
+						this.main();
 					}
 					return true;
 				}
 			},
 		});
+	}
+	async main() {
+		const html = await this.MarkdownToHTML();
+		const alteredDocument = this.buildHTMLDocument(html);
+		const filePath = `Daily Notes/${this.getCurrentFileName()}.html`;
+		await this.SaveFile(alteredDocument, filePath);
+		this.app.openWithDefaultApp(filePath);
 	}
 
 	async MarkdownToHTML(): Promise<string> {
@@ -49,8 +42,7 @@ export default class MyPlugin extends Plugin {
 			throw new Error("Could not determine the file path.");
 		}
 		let outputFile: string = this.replaceFileExtension(inputFile, "html");
-		console.log(outputFile);
-		
+
 		this.app.commands.executeCommandById(
 			"obsidian-pandoc:pandoc-export-html",
 		);
@@ -60,7 +52,9 @@ export default class MyPlugin extends Plugin {
 		): Promise<void> => {
 			const startTime = Date.now();
 			while (Date.now() - startTime < timeoutMs) {
-				const exists = await this.app.vault.adapter.exists(normalizePath(outputFile));
+				const exists = await this.app.vault.adapter.exists(
+					normalizePath(outputFile),
+				);
 				if (exists) return;
 				await new Promise((r) => setTimeout(r, intervalMs));
 			}
@@ -75,17 +69,22 @@ export default class MyPlugin extends Plugin {
 			throw err;
 		}
 
-		const exists = await this.app.vault.adapter.exists(normalizePath(outputFile));
+		const exists = await this.app.vault.adapter.exists(
+			normalizePath(outputFile),
+		);
 		if (!exists) {
 			new Notice("FILE DOES NOT EXIST!: " + outputFile);
 			throw new Error("FILE DOES NOT EXIST!: " + outputFile);
 		}
 
-		const file = await this.app.vault.adapter.read(normalizePath(outputFile));
+		const file = await this.app.vault.adapter.read(
+			normalizePath(outputFile),
+		);
 		await this.app.vault.adapter.remove(normalizePath(outputFile));
 
 		return file;
 	}
+
 	buildHTMLDocument(html: string): string {
 		const customCss = `
 			body { background: white; color: black; font-family: sans-serif; }
@@ -111,20 +110,18 @@ export default class MyPlugin extends Plugin {
 			oldHead.parentNode.replaceChild(newHead, oldHead);
 		}
 		const newHtml = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
-		console.log(newHtml);
 
 		return newHtml;
 	}
 
-	async SaveFile(content: string): Promise<void> {
-		const filePath = `Daily Notes/${this.getCurrentFileName()}.html`;
+	async SaveFile(content: string, filePath: string): Promise<void> {
 		const existingFile = this.app.vault.getAbstractFileByPath(filePath);
 		if (existingFile instanceof TFile) {
-			// existingAbstractFile is now typed as TFile
 			await this.app.vault.modify(existingFile, content);
 		} else {
 			await this.app.vault.create(filePath, content);
 		}
+		new Notice("HTML File Saved")
 	}
 
 	replaceFileExtension(file: string, ext: string): string {
