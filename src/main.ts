@@ -8,6 +8,7 @@ import {
 } from "obsidian";
 import "@total-typescript/ts-reset";
 import "@total-typescript/ts-reset/dom";
+import * as path from "path";
 
 export default class MyPlugin extends Plugin {
 	private eventRefs: EventRef[] = [];
@@ -29,10 +30,24 @@ export default class MyPlugin extends Plugin {
 	}
 	async main() {
 		const html = await this.MarkdownToHTML();
-		const alteredDocument = this.buildHTMLDocument(html);
+		const alteredDocuemnt = await this.buildHTMLDocument(html);
 		const filePath = `Daily Notes/${this.getCurrentFileName()}.html`;
-		await this.SaveFile(alteredDocument, filePath);
+		await this.SaveFile(alteredDocuemnt, filePath);
 		this.app.openWithDefaultApp(filePath);
+		this.deleteFile(filePath);
+	}
+
+	async deleteFile(filePath: string) {
+		const existingFile = this.app.vault.getAbstractFileByPath(
+			normalizePath(filePath),
+		);
+		if (!existingFile) {
+			new Notice("FAILED TO DELETE HTML FILE");
+			throw new Error("FAILED TO DELETE HTML FILE");
+		}
+
+		await new Promise((r) => setTimeout(r, 1000));
+		this.app.vault.delete(existingFile);
 	}
 
 	async MarkdownToHTML(): Promise<string> {
@@ -69,7 +84,7 @@ export default class MyPlugin extends Plugin {
 			throw new Error("Timed out waiting for HTML export");
 		};
 		try {
-			await waitForFile(5000, 200);
+			await waitForFile(60000, 200);
 		} catch (err) {
 			if (err instanceof Error) {
 				new Notice(err.message);
@@ -85,25 +100,40 @@ export default class MyPlugin extends Plugin {
 		return file;
 	}
 
-	buildHTMLDocument(html: string): string {
-		const customCss = `
-			body { background: white; color: black; font-family: sans-serif; }
-			h1 { font-size: 2em; }
+	async buildHTMLDocument(html: string): Promise<string> {
+		const customHead = `
+			<link rel="preconnect" href="https://fonts.googleapis.com">
+			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+			<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Roboto:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
 		`;
-		const customScript = `console.log('Custom script running!');`;
+		const cssPath = path.join(this.manifest.dir!, "src", "page.css");
+		const customCss = await this.app.vault.adapter.read(
+			normalizePath(cssPath),
+		);
+		const scriptPath = path.join(this.manifest.dir!, "src", "page.js");
+		const customScript = await this.app.vault.adapter.read(
+			normalizePath(scriptPath),
+		);
 		const parser = new DOMParser();
 		const doc = parser.parseFromString(html, "text/html");
-		const newHead = doc.createElement("head");
 
+		const newHead = doc.createElement("head");
 		const title = doc.createElement("title");
 		const style = doc.createElement("style");
 		const script = doc.createElement("script");
-		title.textContent = "Custom Page";
+		title.textContent = "Censored Docuemnt";
 		style.textContent = customCss;
 		script.textContent = customScript;
 		newHead.appendChild(title);
 		newHead.appendChild(style);
 		newHead.appendChild(script);
+		const headFragment = parser.parseFromString(
+			`<head>${customHead}</head>`,
+			"text/html",
+		);
+		[...headFragment.head.childNodes].forEach((node) => {
+			newHead.appendChild(node);
+		});
 
 		const oldHead = doc.querySelector("head");
 		if (oldHead && oldHead.parentNode) {

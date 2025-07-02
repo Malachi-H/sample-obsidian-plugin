@@ -1,0 +1,33 @@
+body {
+	background: #1e1e24;
+	color: #f8f8f2;
+	margin: 3em 30vw;
+	font-family: Calibri, sans-serif;
+}
+
+@media (max-aspect-ratio: 3/2) {
+	body {
+		margin: 3em 10vw;
+	}
+}
+
+h1,
+h2,
+h3,
+h4,
+h5 {
+	font-family: "JetBrains Mono", Ariel;
+	font-optical-sizing: auto;
+	font-weight: 800;
+	font-style: bold;
+}
+
+/* p { */
+/* 	line-height: 1.5; */
+/* } */
+
+a {
+	color: #f6c999;
+	text-decoration: none;
+}
+
