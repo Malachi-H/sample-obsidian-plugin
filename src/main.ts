@@ -28,26 +28,29 @@ export default class MyPlugin extends Plugin {
 			},
 		});
 	}
-	async main() {
-		const html = await this.MarkdownToHTML();
-		const alteredDocuemnt = await this.buildHTMLDocument(html);
-		const filePath = `Daily Notes/${this.getCurrentFileName()}.html`;
-		await this.SaveFile(alteredDocuemnt, filePath);
-		this.app.openWithDefaultApp(filePath);
-		this.deleteFile(filePath);
-	}
+async main() {
+    const html = await this.MarkdownToHTML();
+    const alteredDocument = await this.buildHTMLDocument(html);
+    
+    const currentPath = this.getCurrentFilePath();
+    const dir = currentPath ? path.dirname(currentPath) : "";
+    const filePath = `${dir}/${this.getCurrentFileName()}.html`;
+    
+    await this.SaveFile(alteredDocument, filePath);
+    await this.app.openWithDefaultApp(filePath);
+    await this.deleteFile(filePath);
+}
 
 	async deleteFile(filePath: string) {
-		const existingFile = this.app.vault.getAbstractFileByPath(
-			normalizePath(filePath),
-		);
-		if (!existingFile) {
+		const normalizedPath = normalizePath(filePath);
+		const exists = await this.app.vault.adapter.exists(normalizedPath);
+		if (!exists) {
 			new Notice("FAILED TO DELETE HTML FILE");
 			throw new Error("FAILED TO DELETE HTML FILE");
 		}
 
-		await new Promise((r) => setTimeout(r, 1000));
-		this.app.vault.delete(existingFile);
+		await new Promise((r) => setTimeout(r, 3000));
+		await this.app.vault.adapter.remove(normalizedPath);
 	}
 
 	async MarkdownToHTML(): Promise<string> {
